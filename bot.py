@@ -1,403 +1,341 @@
-
-# --- 2. AYARLAR ---
-# Token ve ID'ni buraya tırnak içinde yazmayı unutma!
-
-import os
+import telebot
 import random
-import time
-import threading
-import asyncio
 import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
+import os
+import time
 
-# --- 1. RENDER KAPANMAMA SİSTEMİ (KEEP-ALIVE) ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Lucius Casino System is Active")
-
-def run_health_check_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
-
-# --- 2. AYARLAR ---
+# --- AYARLAR ---
 TOKEN = "8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M"
+bot = telebot.TeleBot(API_TOKEN)
+
+# YÖNETİCİ ID LİSTESİ (Buraya kendi ID'ni ve diğer adminlerin ID'sini virgülle ekle)
+# Örnek: [123456789, 987654321]
 ADMIN_IDS = [7795343194, 6126663392] # Kendi sayısal ID'ni buraya yaz (ID'ni öğrenmek için @userinfobot'a yazabilirsin)
-DB_FILE = "users.json" # Verilerin tutulacağı dosya
 
-# --- 3. VERİTABANI YÖNETİMİ (AUTO-SAVE) ---
-user_data = {}
+# Veritabanı Dosyası
+DB_FILE = "casino_users.json"
 
+# --- VERİTABANI YÖNETİMİ ---
 def load_db():
-    global user_data
-    try:
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            # JSON'dan gelen string keyleri int'e çeviriyoruz
-            data = json.load(f)
-            user_data = {int(k): v for k, v in data.items()}
-            print("✅ Veritabanı yüklendi.")
-    except FileNotFoundError:
-        print("⚠️ Veritabanı yok, yeni oluşturuluyor.")
-        user_data = {}
+    if os.path.exists(DB_FILE):
+        try:
+            with open(DB_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
 
-def save_db():
-    try:
-        with open(DB_FILE, "w", encoding="utf-8") as f:
-            json.dump(user_data, f, ensure_ascii=False, indent=4)
-    except Exception as e:
-        print(f"❌ Kayıt hatası: {e}")
+def save_db(data):
+    with open(DB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
 
-def get_user(user_id, name="Oyuncu"):
-    if user_id not in user_data:
-        user_data[user_id] = {"bakiye": 10000, "last_bonus": 0, "name": name}
-        save_db()
-    return user_data[user_id]
+users = load_db()
 
-def check_funds(user_id, miktar):
-    user = get_user(user_id)
-    if miktar <= 0 or miktar > user["bakiye"]: return False
-    return True
+# --- YARDIMCI FONKSİYONLAR ---
+def get_balance(user_id):
+    user_id = str(user_id)
+    return users.get(user_id, {}).get("balance", 0)
 
-# --- 4. ANA MENÜ ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Kullanıcıyı sisteme kaydet
-    get_user(update.effective_user.id, update.effective_user.first_name)
+def update_balance(user_id, amount):
+    user_id = str(user_id)
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "last_daily": 0}
     
-    menu = (
-        "**Ｃ Ａ Ｓ Ｉ Ｎ Ｏ  #Lucius**\n\n"
-        "👑 **HESAP İŞLEMLERİ**\n"
-        "➖➖➖➖➖➖➖➖➖➖\n"
-        "💳 /bakiye  →  Cüzdan durumu\n\n"
-        "🎁 /bonus   →  Günlük 25.000 TL harçlık\n\n"
-        "💸 /borc <miktar> → Yanıtladığın kişiye para at\n\n"
-        "🏆 /top     →  En zengin 10 kişi\n\n\n"
-        "🎲 **OYUNLAR**\n"
-        "➖➖➖➖➖➖➖➖➖➖\n"
-        "🎰 /slot <miktar> <renk> → (kirmizi/siyah/yesil)\n\n"
-        "🎲 /zar <miktar>  →  Zar at (Animasyonlu)\n\n"
-        "🎡 /rulet <miktar> <renk> → Klasik Rulet\n\n"
-        "🃏 /bj <miktar>   →  Blackjack (Butonlu)\n\n"
-        "💣 /mayin <miktar> → Mayın Tarlası (Butonlu)\n\n"
-        "🔥 /risk <miktar>  →  Ya hep ya hiç (%50)\n\n"
-        "🎡 /cark <miktar>  →  Şans Çarkı\n\n"
-        "➖➖➖➖➖➖➖➖➖➖\n"
-        "💰 *Başlangıç: 10.000 TL* | 📅 *Bonus: 24 Saatte 1*"
-    )
-    await update.message.reply_text(menu, parse_mode="Markdown")
+    users[user_id]["balance"] += amount
+    save_db(users)
 
-# --- 5. HESAP KOMUTLARI ---
-async def bakiye(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id, update.effective_user.first_name)
-    await update.message.reply_text(f"💰 **Mevcut Bakiyeniz:** {user['bakiye']:,} TL", parse_mode="Markdown")
+def set_balance(user_id, amount):
+    user_id = str(user_id)
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "last_daily": 0}
+    
+    users[user_id]["balance"] = amount
+    save_db(users)
 
-async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    if time.time() - user["last_bonus"] < 86400:
-        kalan = int((86400 - (time.time() - user["last_bonus"])) / 3600)
-        return await update.message.reply_text(f"❌ Henüz zamanı gelmedi! {kalan} saat sonra gel.")
-    user["bakiye"] += 25000
-    user["last_bonus"] = time.time()
-    save_db()
-    await update.message.reply_text("✅ **25.000 TL** günlük harçlık hesabına eklendi!", parse_mode="Markdown")
+# --- MENÜ VE KOMUTLAR ---
 
-async def borc(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("❌ Para göndermek için bir mesajı yanıtlamalısın!")
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    user_id = str(message.from_user.id)
+    if user_id not in users:
+        users[user_id] = {"balance": 1000, "last_daily": 0}
+        save_db(users)
+        bot.reply_to(message, "👋 **Casino Lucius'a Hoş Geldin!**\n\nHesabın oluşturuldu ve **1000 Para** başlangıç bakiyesi eklendi. Bol şans!")
+    else:
+        bot.reply_to(message, "Zaten mekana giriş yapmışsın kral. /komutlar yazarak oyunlara bakabilirsin.")
+
+@bot.message_handler(commands=['komutlar', 'help', 'yardim'])
+def send_help(message):
+    help_text = """
+🎰 **CASINO LUCIUS KOMUT LISTESI** 🎰
+
+💸 **Finansal İşlemler:**
+• `/bakiye` veya `/cuzdan` - Cebindeki parayı gör.
+• `/gunluk` - 24 saatte bir bedava para al.
+• `/transfer [miktar]` - Başka birinin mesajını yanıtlayarak para gönder.
+
+🎲 **Oyunlar:**
+• `/zar [miktar]` - Bot ile zar at, yüksek atan kazanır.
+• `/slot [miktar]` - Slot makinesini çevir (🍒 7️⃣ 💎). 3'lü gelirse zengin olursun!
+• `/rusruleti [miktar]` - Ya hep ya hiç! Silah patlarsa paran sıfırlanır.
+
+👮 **Yönetim (Sadece Admin):**
+• `/ceza [miktar]` - (Yanıtla) Kişinin parasını keser.
+• `/paraver [miktar]` - (Yanıtla) Kişiye havadan para ekler.
+
+⚠️ *Not: Kumar bağımlılık yapar, ama burası sanal. Keyfine bak!*
+    """
+    bot.reply_to(message, help_text)
+
+@bot.message_handler(commands=['bakiye', 'cuzdan'])
+def check_balance_cmd(message):
+    para = get_balance(message.from_user.id)
+    bot.reply_to(message, f"💳 **HESAP DURUMU**\n\n💰 Mevcut Bakiye: **{para}** Para")
+
+@bot.message_handler(commands=['gunluk'])
+def daily_bonus(message):
+    user_id = str(message.from_user.id)
+    now = time.time()
+    
+    if user_id not in users:
+        users[user_id] = {"balance": 0, "last_daily": 0}
+
+    last_claim = users[user_id].get("last_daily", 0)
+    
+    if now - last_claim > 86400: # 24 Saat
+        bonus = random.randint(500, 2000)
+        users[user_id]["balance"] += bonus
+        users[user_id]["last_daily"] = now
+        save_db(users)
+        bot.reply_to(message, f"📅 **Günlük Bonus!**\n\nBugünkü nasibin: **+{bonus} Para** eklendi.")
+    else:
+        kalan_saat = int((86400 - (now - last_claim)) / 3600)
+        bot.reply_to(message, f"⏳ Daha zaman dolmadı kral. **{kalan_saat} saat** sonra tekrar gel.")
+
+# --- OYUN MEKANİKLERİ ---
+
+@bot.message_handler(commands=['zar'])
+def play_dice(message):
     try:
-        miktar = int(context.args[0])
-        gonderen = get_user(update.effective_user.id)
-        alici_id = update.message.reply_to_message.from_user.id
-        alici_isim = update.message.reply_to_message.from_user.first_name
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ Kullanım: `/zar [miktar]`")
+            return
+
+        bet = int(args[1])
+        user_id = message.from_user.id
+        current_bal = get_balance(user_id)
+
+        if bet <= 0:
+            bot.reply_to(message, "Pozitif bir sayı girmelisin.")
+            return
+        if bet > current_bal:
+            bot.reply_to(message, "💸 Paran yetmiyor! Bakiye yetersiz.")
+            return
+
+        # Oyun
+        user_roll = random.randint(1, 6)
+        bot_roll = random.randint(1, 6)
         
-        if not check_funds(update.effective_user.id, miktar):
-            return await update.message.reply_text("❌ Yetersiz bakiye!")
-        
-        gonderen["bakiye"] -= miktar
-        get_user(alici_id, alici_isim)["bakiye"] += miktar
-        save_db()
-        await update.message.reply_text(f"✅ **{alici_isim}** kişisine {miktar:,} TL gönderildi.", parse_mode="Markdown")
-    except:
-        await update.message.reply_text("❌ Hata! Kullanım: /borc <miktar>")
+        msg = f"🎲 **ZAR DÜELLOSU** 🎲\n\n👤 Senin Zarın: **{user_roll}**\n🤖 Lucius'un Zarı: **{bot_roll}**\n"
 
-async def top_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sorted_users = sorted(user_data.items(), key=lambda x: x[1]['bakiye'], reverse=True)[:10]
-    txt = "🏆 **LUCIUS ZENGİNLER LİSTESİ**\n➖➖➖➖➖➖➖➖➖➖\n"
-    for i, (uid, d) in enumerate(sorted_users, 1):
-        txt += f"**{i}.** {d['name']} ➔ {d['bakiye']:,} TL\n"
-    await update.message.reply_text(txt, parse_mode="Markdown")
-
-# --- 6. OYUNLAR (LOGIC & ANIMATION) ---
-
-async def slot(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    try:
-        miktar = int(context.args[0])
-        secim = context.args[1].lower()
-        if not check_funds(update.effective_user.id, miktar):
-            return await update.message.reply_text("❌ Bakiye yetersiz!")
-
-        msg = await update.message.reply_dice(emoji="🎰")
-        await asyncio.sleep(3.5)
-
-        renk = random.choices(["kirmizi", "siyah", "yesil"], weights=[48, 48, 4])[0]
-        
-        if secim == renk:
-            carpan = 10 if renk == "yesil" else 2
-            kazanc = (miktar * carpan) - miktar
-            user["bakiye"] += kazanc
-            await update.message.reply_text(f"🎰 Slot **{renk.upper()}** geldi!\n🔥 **KAZANDIN!** +{kazanc + miktar:,} TL", parse_mode="Markdown")
+        if user_roll > bot_roll:
+            update_balance(user_id, bet)
+            msg += f"\n✅ **KAZANDIN!** +{bet} para hesabına eklendi."
+        elif bot_roll > user_roll:
+            update_balance(user_id, -bet)
+            msg += f"\n❌ **KAYBETTİN!** -{bet} para gitti."
         else:
-            user["bakiye"] -= miktar
-            await update.message.reply_text(f"🎰 Slot **{renk.upper()}** geldi.\n💀 **KAYBETTİN!** -{miktar:,} TL", parse_mode="Markdown")
-        save_db()
-    except:
-        await update.message.reply_text("⚠️ Kullanım: /slot <miktar> <kirmizi/siyah/yesil>")
+            msg += f"\n🤝 **BERABERE!** Ortada kaldık, para iade."
 
-async def zar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
+        bot.reply_to(message, msg)
+
+    except ValueError:
+        bot.reply_to(message, "Lütfen geçerli bir sayı gir.")
+
+@bot.message_handler(commands=['slot'])
+def play_slot(message):
     try:
-        miktar = int(context.args[0])
-        if not check_funds(update.effective_user.id, miktar):
-            return await update.message.reply_text("❌ Bakiye yetersiz!")
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ Kullanım: `/slot [miktar]`")
+            return
 
-        msg = await update.message.reply_dice(emoji="🎲")
-        await asyncio.sleep(3.5)
+        bet = int(args[1])
+        user_id = message.from_user.id
+        current_bal = get_balance(user_id)
+
+        if bet <= 0 or bet > current_bal:
+            bot.reply_to(message, "Geçersiz miktar veya yetersiz bakiye.")
+            return
+
+        symbols = ["🍒", "🍋", "🍇", "💎", "7️⃣", "🔔"]
+        result = [random.choice(symbols) for _ in range(3)]
         
-        val = msg.dice.value
-        if val >= 4:
-            user["bakiye"] += miktar
-            await update.message.reply_text(f"🎲 Zar **{val}** geldi.\n✅ **KAZANDIN!** +{miktar:,} TL", parse_mode="Markdown")
+        # Animasyon Mesajı
+        sent_msg = bot.send_message(message.chat.id, "🎰 **Slotlar Dönüyor...** 🎰")
+        time.sleep(1.5) # Heyecan efekti
+        
+        final_text = f"🎰 | {result[0]} | {result[1]} | {result[2]} | 🎰"
+        
+        # Kazanma Mantığı
+        win_amount = 0
+        status = ""
+        
+        if result[0] == result[1] == result[2]:
+            win_amount = bet * 10
+            status = f"\n🚨 **JACKPOT!** 🚨 Paranı 10'a katladın! (+{win_amount})"
+            update_balance(user_id, win_amount) # Bahis zaten cepte, üzerine ekle
+        elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
+            win_amount = bet * 2
+            status = f"\n🎉 **İkili Tutturdun!** Paranı 2'ye katladın! (+{win_amount})"
+            update_balance(user_id, win_amount)
         else:
-            user["bakiye"] -= miktar
-            await update.message.reply_text(f"🎲 Zar **{val}** geldi.\n❌ **KAYBETTİN!** -{miktar:,} TL", parse_mode="Markdown")
-        save_db()
-    except: pass
-
-async def rulet(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    try:
-        miktar = int(context.args[0])
-        secim = context.args[1].lower()
-        if not check_funds(update.effective_user.id, miktar): return await update.message.reply_text("❌ Paran yok!")
-
-        renk = random.choices(["kirmizi", "siyah", "yesil"], weights=[48, 48, 4])[0]
-        if secim == renk:
-            carpan = 14 if renk == "yesil" else 2
-            odul = miktar * carpan
-            user["bakiye"] += (odul - miktar)
-            await update.message.reply_text(f"🎡 Top **{renk.upper()}** renginde durdu!\n🤑 **TEBRİKLER!** {odul:,} TL kazandın.", parse_mode="Markdown")
-        else:
-            user["bakiye"] -= miktar
-            await update.message.reply_text(f"🎡 Top **{renk.upper()}** renginde durdu.\n💀 Kaybettin.", parse_mode="Markdown")
-        save_db()
-    except: await update.message.reply_text("⚠️ Kullanım: /rulet <miktar> <kirmizi/siyah/yesil>")
-
-async def risk(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    try:
-        miktar = int(context.args[0])
-        if not check_funds(update.effective_user.id, miktar): return await update.message.reply_text("❌ Para yok!")
-
-        if random.random() < 0.5:
-            user["bakiye"] += miktar
-            await update.message.reply_text(f"🔥 **RİSK BAŞARILI!** Paranı ikiye katladın. (+{miktar:,} TL)", parse_mode="Markdown")
-        else:
-            user["bakiye"] -= miktar
-            await update.message.reply_text("💀 **RİSK BAŞARISIZ.** Paranı kaybettin.", parse_mode="Markdown")
-        save_db()
-    except: pass
-
-async def cark(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = get_user(update.effective_user.id)
-    try:
-        miktar = int(context.args[0])
-        if not check_funds(update.effective_user.id, miktar): return await update.message.reply_text("❌ Para yok!")
-
-        oran = random.choice([0, 0.5, 1.5, 2, 3])
-        kazanc = int(miktar * oran)
-        user["bakiye"] = (user["bakiye"] - miktar) + kazanc
-        
-        if oran < 1:
-            await update.message.reply_text(f"🎡 Çark **x{oran}** geldi. Kaybettin. Yeni Bakiye: {user['bakiye']:,} TL")
-        else:
-            await update.message.reply_text(f"🎡 Çark **x{oran}** geldi! Kazandın! Yeni Bakiye: {user['bakiye']:,} TL")
-        save_db()
-    except: pass
-
-# --- 7. BUTONLU OYUNLAR (BLACKJACK & MAYIN) ---
-
-async def bj_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        miktar = int(context.args[0])
-        if not check_funds(update.effective_user.id, miktar): return await update.message.reply_text("❌ Paran yetersiz!")
-        
-        puan = random.randint(10, 19)
-        keyboard = [[InlineKeyboardButton("🃏 Kart Çek", callback_data=f"bj_h_{miktar}_{puan}"),
-                     InlineKeyboardButton("✋ Dur", callback_data=f"bj_s_{miktar}_{puan}")]]
-        
-        await update.message.reply_text(f"🃏 **BLACKJACK**\nBahis: {miktar:,} TL\nSenin Puanın: **{puan}**\n\nNe yapacaksın?", 
-                                       reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-    except: await update.message.reply_text("⚠️ Kullanım: /bj <miktar>")
-
-async def mayin_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        miktar = int(context.args[0])
-        if not check_funds(update.effective_user.id, miktar): return await update.message.reply_text("❌ Paran yetersiz!")
-        
-        keyboard = []
-        for r in range(3):
-            row = []
-            for c in range(3):
-                row.append(InlineKeyboardButton("📦", callback_data=f"m_{miktar}_{r}{c}"))
-            keyboard.append(row)
+            status = f"\n📉 **Kaybettin.** -{bet} para."
+            update_balance(user_id, -bet)
             
-        await update.message.reply_text(f"💣 **MAYIN TARLASI**\nBahis: {miktar:,} TL\nBir kutu seç ve şansını dene!", 
-                                       reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-    except: await update.message.reply_text("⚠️ Kullanım: /mayin <miktar>")
+        bot.edit_message_text(chat_id=message.chat.id, message_id=sent_msg.message_id, text=final_text + status)
 
-# --- 8. BUTON İŞLEYİCİ ---
-async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user = get_user(query.from_user.id)
-    data = query.data.split("_")
-    
-    await query.answer()
-    
-    # BLACKJACK
-    if data[0] == "bj":
-        action, miktar, puan = data[1], int(data[2]), int(data[3])
-        
-        if action == "s": # Dur
-            kasa = random.randint(17, 23)
-            if kasa > 21:
-                user["bakiye"] += miktar
-                sonuc = f"✅ **KAZANDIN!**\nSen: {puan} | Kasa: {kasa} (Patladı)"
-            elif puan > kasa:
-                user["bakiye"] += miktar
-                sonuc = f"✅ **KAZANDIN!**\nSen: {puan} | Kasa: {kasa}"
-            elif puan == kasa:
-                sonuc = f"🤝 **BERABERE!** Para iade.\nSen: {puan} | Kasa: {kasa}"
-            else:
-                user["bakiye"] -= miktar
-                sonuc = f"💀 **KAYBETTİN!**\nSen: {puan} | Kasa: {kasa}"
-            await query.edit_message_text(sonuc, parse_mode="Markdown")
+    except ValueError:
+        bot.reply_to(message, "Sayı gir sayı.")
 
-        elif action == "h": # Çek
-            puan += random.randint(1, 10)
-            if puan > 21:
-                user["bakiye"] -= miktar
-                await query.edit_message_text(f"💥 **PATLADIN!**\nPuanın: {puan}. Kaybettin.", parse_mode="Markdown")
-            else:
-                kb = [[InlineKeyboardButton("🃏 Kart Çek", callback_data=f"bj_h_{miktar}_{puan}"),
-                       InlineKeyboardButton("✋ Dur", callback_data=f"bj_s_{miktar}_{puan}")]]
-                await query.edit_message_text(f"🃏 Puanın: **{puan}**. Devam mı?", reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
-
-    # MAYIN
-    if data[0] == "m":
-        miktar = int(data[1])
-        if random.random() < 0.30:
-            user["bakiye"] -= miktar
-            await query.edit_message_text(f"💣 **BOOOM!** Mayına bastın.\nKaybedilen: -{miktar:,} TL", parse_mode="Markdown")
-        else:
-            kazanc = int(miktar * 0.5)
-            user["bakiye"] += kazanc
-            await query.edit_message_text(f"💎 **ELMAS!** Kutuda elmas vardı.\nKazanç: +{kazanc:,} TL", parse_mode="Markdown")
-            
-    save_db() # Her buton işleminden sonra kaydet
-
-# --- 9. ADMIN KOMUTLARI (DÜZELTİLDİ + ÖZEL MESAJ EKLENDİ) ---
-async def banka(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Yetki Kontrolü
-    if update.effective_user.id not in ADMIN_IDS:
-        return await update.message.reply_text("bu komutu kullanma etgin yok yarram")
-    
+@bot.message_handler(commands=['rusruleti'])
+def play_russian_roulette(message):
     try:
-        miktar = int(context.args[0])
-        get_user(update.effective_user.id)["bakiye"] += miktar
-        save_db()
-        await update.message.reply_text(f"🏦 Kasa Güncellendi: +{miktar:,} TL")
-    except: pass
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ Kullanım: `/rusruleti [miktar]`")
+            return
+
+        bet = int(args[1])
+        user_id = message.from_user.id
+        current_bal = get_balance(user_id)
+
+        if bet > current_bal:
+            bot.reply_to(message, "Cesaretin var ama paran yok.")
+            return
+
+        bot.send_message(message.chat.id, "🔫 Silahı doldurdum... Topu çevirdim... Tetiği çekiyorum...")
+        time.sleep(2)
+
+        bullet = random.randint(1, 6)
+        
+        if bullet == 1:
+            # BAM - Ölüm
+            # Kullanıcı bahsi kaybeder, üstüne bakiyesinin yarısı silinir (Ceza)
+            loss = bet
+            update_balance(user_id, -loss)
+            bot.reply_to(message, "💥 **BAM!** Kafana sıktın.\nMasadaki parayı kaybettin.")
+        else:
+            # Yaşam - Ödül
+            win = int(bet * 1.5)
+            update_balance(user_id, win)
+            bot.reply_to(message, f"💨 **Tık...** Şanslısın, silah patlamadı.\nCesaret ödülü: **+{win} para** kazandın.")
+
+    except ValueError:
+        bot.reply_to(message, "Hata yaptın.")
+
+@bot.message_handler(commands=['transfer'])
+def transfer_money(message):
+    try:
+        if not message.reply_to_message:
+            bot.reply_to(message, "Kime para göndereceksin? Mesajını yanıtla.")
+            return
+
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "⚠️ Kullanım: `/transfer [miktar]`")
+            return
+            
+        amount = int(args[1])
+        sender_id = message.from_user.id
+        receiver_id = message.reply_to_message.from_user.id
+        
+        if sender_id == receiver_id:
+            bot.reply_to(message, "Kendine para gönderemezsin manyak.")
+            return
+            
+        sender_bal = get_balance(sender_id)
+        
+        if amount <= 0:
+            bot.reply_to(message, "Pozitif bir sayı gir.")
+            return
+        if amount > sender_bal:
+            bot.reply_to(message, "Olmayan parayı gönderemezsin.")
+            return
+            
+        # İşlem
+        update_balance(sender_id, -amount)
+        update_balance(receiver_id, amount)
+        
+        bot.reply_to(message, f"💸 **Transfer Başarılı!**\n\nGönderen: Sen\nAlıcı: {message.reply_to_message.from_user.first_name}\nMiktar: {amount}")
+
+    except ValueError:
+        bot.reply_to(message, "Miktarı düzgün yaz.")
+
+# --- ADMIN KOMUTLARI (MANUEL LISTE KONTROLLU) ---
+
 @bot.message_handler(commands=['ceza'])
-def ceza_kes(message):
-    # Kişinin gruptaki yetkisini kontrol eder
-    kullanici_durumu = bot.get_chat_member(message.chat.id, message.from_user.id).status
-    
-    # Eğer kullanıcı yönetici veya kurucu değilse engelle
-    if kullanici_durumu not in ['administrator', 'creator']:
+def admin_ceza(message):
+    # ID Listesi Kontrolü
+    if message.from_user.id not in ADMIN_LIST:
         bot.reply_to(message, "bu komutu kullanma etgin yok yarram")
         return
 
-    # Yanıtlanan bir mesaj var mı?
     if not message.reply_to_message:
-        bot.reply_to(message, "Ceza kesmek için birinin mesajını yanıtlaman lazım.")
+        bot.reply_to(message, "Kime ceza keseceksin? Mesajını yanıtla.")
         return
 
     try:
-        parts = message.text.split()
-        if len(parts) < 2:
-            bot.reply_to(message, "Miktarı yazmadın: /ceza [miktar]")
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "Miktar gir: `/ceza [miktar]`")
             return
             
-        ceza_miktari = int(parts[1])
-        hedef_id = message.reply_to_message.from_user.id
-        hedef_isim = message.reply_to_message.from_user.first_name
+        amount = int(args[1])
+        target_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
         
-        # Bakiyeyi çek ve hesapla (Sıfırın altına düşürme)
-        mevcut_bakiye = db.get(hedef_id, 0)
-        yeni_bakiye = max(0, mevcut_bakiye - ceza_miktari)
-            
-        db[hedef_id] = yeni_bakiye
+        current_bal = get_balance(target_id)
+        # Eksiye düşmeme garantisi (max(0, ...))
+        new_bal = max(0, current_bal - amount)
         
-        bot.send_message(message.chat.id, f"🚨 **LUCIUS ADALETİ!**\n\n👤 **Kesilen:** {hedef_isim}\n💸 **Miktar:** {ceza_miktari}\n💰 **Güncel Bakiye:** {yeni_bakiye}")
+        set_balance(target_id, new_bal)
+        
+        bot.send_message(message.chat.id, f"🚨 **CEZA KESİLDİ!**\n\n👤 **Kişi:** {target_name}\n🔻 **Kesilen:** {amount}\n💰 **Kalan Bakiye:** {new_bal}")
         
     except ValueError:
-        bot.reply_to(message, "Sayıyı düzgün yaz kral.")
-        
-        # Hedef kullanıcıyı veritabanından çek (yoksa oluşturur)
-        target_user = get_user(target_id, target_name)
-        target_user["bakiye"] -= miktar
-        save_db()
-        
-        await update.message.reply_text(f"⚖️ **{target_name}** kişisine {miktar:,} TL ceza kesildi.\nKalan Bakiye: {target_user['bakiye']:,} TL", parse_mode="Markdown")
-    except Exception as e:
-        await update.message.reply_text("⚠️ Hata oluştu. Kullanım: /ceza <miktar>")
+        bot.reply_to(message, "Sayı gir.")
 
-# --- 10. ANA ÇALIŞTIRMA ---
-def main():
-    load_db() # Başlangıçta verileri yükle
-    threading.Thread(target=run_health_check_server, daemon=True).start()
-    
-    app = Application.builder().token(TOKEN).build()
-    
-    # Komutlar
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("bakiye", bakiye))
-    app.add_handler(CommandHandler("bonus", bonus))
-    app.add_handler(CommandHandler("borc", borc))
-    app.add_handler(CommandHandler("top", top_list))
-    
-    app.add_handler(CommandHandler("slot", slot))
-    app.add_handler(CommandHandler("zar", zar))
-    app.add_handler(CommandHandler("rulet", rulet))
-    app.add_handler(CommandHandler("risk", risk))
-    app.add_handler(CommandHandler("cark", cark))
-    app.add_handler(CommandHandler("bj", bj_start))
-    app.add_handler(CommandHandler("mayin", mayin_start))
-    
-    # Admin
-    app.add_handler(CommandHandler("banka", banka))
-    app.add_handler(CommandHandler("ceza", ceza))
-    
-    app.add_handler(CallbackQueryHandler(handle_buttons))
-    
-    print("Lucius Casino Aktif...")
-    app.run_polling()
+@bot.message_handler(commands=['paraver'])
+def admin_give(message):
+    # ID Listesi Kontrolü
+    if message.from_user.id not in ADMIN_LIST:
+        bot.reply_to(message, "bu komutu kullanma etgin yok yarram")
+        return
 
-if __name__ == "__main__":
-    main()
+    if not message.reply_to_message:
+        bot.reply_to(message, "Kime para vereceksin? Mesajını yanıtla.")
+        return
+
+    try:
+        args = message.text.split()
+        if len(args) < 2:
+            bot.reply_to(message, "Miktar gir: `/paraver [miktar]`")
+            return
+            
+        amount = int(args[1])
+        target_id = message.reply_to_message.from_user.id
+        target_name = message.reply_to_message.from_user.first_name
+        
+        update_balance(target_id, amount)
+        
+        bot.send_message(message.chat.id, f"💵 **PARA YATIRILDI**\n\n👤 **Kişi:** {target_name}\n➕ **Yatırılan:** {amount}\n💰 **Yeni Bakiye:** {get_balance(target_id)}")
+        
+    except ValueError:
+        bot.reply_to(message, "Sayı gir.")
+
+# --- BAŞLAT ---
+bot.polling()
 
 
