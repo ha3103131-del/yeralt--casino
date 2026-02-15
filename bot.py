@@ -26,7 +26,7 @@ def run_health_check_server():
 
 # --- 2. AYARLAR ---
 TOKEN = "8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M"
-ADMIN_IDS = [7795343194] # Kendi sayısal ID'ni buraya yaz (ID'ni öğrenmek için @userinfobot'a yazabilirsin)
+ADMIN_IDS = [7795343194, 6126663392] # Kendi sayısal ID'ni buraya yaz (ID'ni öğrenmek için @userinfobot'a yazabilirsin)
 DB_FILE = "users.json" # Verilerin tutulacağı dosya
 
 # --- 3. VERİTABANI YÖNETİMİ (AUTO-SAVE) ---
@@ -377,3 +377,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
