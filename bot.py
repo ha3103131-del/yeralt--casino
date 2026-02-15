@@ -321,19 +321,41 @@ async def banka(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_db()
         await update.message.reply_text(f"🏦 Kasa Güncellendi: +{miktar:,} TL")
     except: pass
-
-async def ceza(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Yetki Kontrolü
-    if update.effective_user.id not in ADMIN_IDS:
-        return await update.message.reply_text("bu komutu kullanma etgin yok yarram")
+@bot.message_handler(commands=['ceza'])
+def ceza_kes(message):
+    # Kişinin gruptaki yetkisini kontrol eder
+    kullanici_durumu = bot.get_chat_member(message.chat.id, message.from_user.id).status
     
-    if not update.message.reply_to_message:
-        return await update.message.reply_text("❌ Kime ceza keseceğini yanıtlayarak seç!")
+    # Eğer kullanıcı yönetici veya kurucu değilse engelle
+    if kullanici_durumu not in ['administrator', 'creator']:
+        bot.reply_to(message, "bu komutu kullanma etgin yok yarram")
+        return
+
+    # Yanıtlanan bir mesaj var mı?
+    if not message.reply_to_message:
+        bot.reply_to(message, "Ceza kesmek için birinin mesajını yanıtlaman lazım.")
+        return
 
     try:
-        miktar = int(context.args[0])
-        target_id = update.message.reply_to_message.from_user.id
-        target_name = update.message.reply_to_message.from_user.first_name
+        parts = message.text.split()
+        if len(parts) < 2:
+            bot.reply_to(message, "Miktarı yazmadın: /ceza [miktar]")
+            return
+            
+        ceza_miktari = int(parts[1])
+        hedef_id = message.reply_to_message.from_user.id
+        hedef_isim = message.reply_to_message.from_user.first_name
+        
+        # Bakiyeyi çek ve hesapla (Sıfırın altına düşürme)
+        mevcut_bakiye = db.get(hedef_id, 0)
+        yeni_bakiye = max(0, mevcut_bakiye - ceza_miktari)
+            
+        db[hedef_id] = yeni_bakiye
+        
+        bot.send_message(message.chat.id, f"🚨 **LUCIUS ADALETİ!**\n\n👤 **Kesilen:** {hedef_isim}\n💸 **Miktar:** {ceza_miktari}\n💰 **Güncel Bakiye:** {yeni_bakiye}")
+        
+    except ValueError:
+        bot.reply_to(message, "Sayıyı düzgün yaz kral.")
         
         # Hedef kullanıcıyı veritabanından çek (yoksa oluşturur)
         target_user = get_user(target_id, target_name)
@@ -377,4 +399,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
