@@ -5,12 +5,17 @@ import os
 import time
 
 # --- AYARLAR ---
-API_TOKEN = '8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M'
+API_TOKEN = '8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M
+'
 bot = telebot.TeleBot(API_TOKEN)
 
-# YÖNETİCİ ID LİSTESİ (Buraya kendi ID'ni ve diğer adminlerin ID'sini virgülle ekle)
-# Örnek: [123456789, 987654321]
-ADMIN_IDS = [7795343194, 6126663392] # Kendi sayısal ID'ni buraya yaz (ID'ni öğrenmek için @userinfobot'a yazabilirsin)
+# --- 👑 PATRON AYARLARI ---
+# Buraya SADECE KENDİ ID'ni yaz (Sınırsız yetki sende)
+SAHIP_ID = 7795343194  
+
+# Buraya TÜM Adminleri yaz (Sen dahil herkes)
+# Örnek: [SAHIP_ID, AHMETIN_ID, MEHMETIN_ID]
+ADMIN_LIST = [7795343194, 6126663392] 
 
 # Veritabanı Dosyası
 DB_FILE = "casino_users.json"
@@ -40,7 +45,6 @@ def update_balance(user_id, amount):
     user_id = str(user_id)
     if user_id not in users:
         users[user_id] = {"balance": 0, "last_daily": 0}
-    
     users[user_id]["balance"] += amount
     save_db(users)
 
@@ -48,11 +52,10 @@ def set_balance(user_id, amount):
     user_id = str(user_id)
     if user_id not in users:
         users[user_id] = {"balance": 0, "last_daily": 0}
-    
     users[user_id]["balance"] = amount
     save_db(users)
 
-# --- MENÜ VE KOMUTLAR ---
+# --- MENÜ VE GENEL KOMUTLAR ---
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
@@ -60,282 +63,205 @@ def send_welcome(message):
     if user_id not in users:
         users[user_id] = {"balance": 1000, "last_daily": 0}
         save_db(users)
-        bot.reply_to(message, "👋 **Casino Lucius'a Hoş Geldin!**\n\nHesabın oluşturuldu ve **1000 Para** başlangıç bakiyesi eklendi. Bol şans!")
+        bot.reply_to(message, "👋 **Casino Lucius'a Hoş Geldin!**\n\nCebine 1000 Para koydum. Kaybetme hemen.")
     else:
-        bot.reply_to(message, "Zaten mekana giriş yapmışsın kral. /komutlar yazarak oyunlara bakabilirsin.")
+        bot.reply_to(message, "Zaten içeridesin kral. Oyunlara dön.")
 
-@bot.message_handler(commands=['komutlar', 'help', 'yardim'])
+@bot.message_handler(commands=['komutlar', 'help'])
 def send_help(message):
-    help_text = """
-🎰 **CASINO LUCIUS KOMUT LISTESI** 🎰
+    bot.reply_to(message, """
+🎰 **CASINO LUCIUS** 🎰
 
-💸 **Finansal İşlemler:**
-• `/bakiye` veya `/cuzdan` - Cebindeki parayı gör.
-• `/gunluk` - 24 saatte bir bedava para al.
-• `/transfer [miktar]` - Başka birinin mesajını yanıtlayarak para gönder.
-
-🎲 **Oyunlar:**
-• `/zar [miktar]` - Bot ile zar at, yüksek atan kazanır.
-• `/slot [miktar]` - Slot makinesini çevir (🍒 7️⃣ 💎). 3'lü gelirse zengin olursun!
-• `/rusruleti [miktar]` - Ya hep ya hiç! Silah patlarsa paran sıfırlanır.
-
-👮 **Yönetim (Sadece Admin):**
-• `/ceza [miktar]` - (Yanıtla) Kişinin parasını keser.
-• `/paraver [miktar]` - (Yanıtla) Kişiye havadan para ekler.
-
-⚠️ *Not: Kumar bağımlılık yapar, ama burası sanal. Keyfine bak!*
-    """
-    bot.reply_to(message, help_text)
+🎲 **/zar [miktar]** - Zar at
+🎰 **/slot [miktar]** - Slot çevir
+🔫 **/rusruleti [miktar]** - Risk al
+💸 **/transfer [miktar]** - (Yanıtla) Para gönder
+💰 **/bakiye** - Paranı gör
+📅 **/gunluk** - Günlük maaşını al
+    """)
 
 @bot.message_handler(commands=['bakiye', 'cuzdan'])
 def check_balance_cmd(message):
     para = get_balance(message.from_user.id)
-    bot.reply_to(message, f"💳 **HESAP DURUMU**\n\n💰 Mevcut Bakiye: **{para}** Para")
+    bot.reply_to(message, f"💳 **Bakiye:** {para} Para")
 
 @bot.message_handler(commands=['gunluk'])
 def daily_bonus(message):
     user_id = str(message.from_user.id)
     now = time.time()
     
-    if user_id not in users:
-        users[user_id] = {"balance": 0, "last_daily": 0}
-
-    last_claim = users[user_id].get("last_daily", 0)
+    if user_id not in users: users[user_id] = {"balance": 0, "last_daily": 0}
     
-    if now - last_claim > 86400: # 24 Saat
+    last_claim = users[user_id].get("last_daily", 0)
+    if now - last_claim > 86400:
         bonus = random.randint(500, 2000)
         users[user_id]["balance"] += bonus
         users[user_id]["last_daily"] = now
         save_db(users)
-        bot.reply_to(message, f"📅 **Günlük Bonus!**\n\nBugünkü nasibin: **+{bonus} Para** eklendi.")
+        bot.reply_to(message, f"📅 **Günlük:** +{bonus} Para eklendi.")
     else:
-        kalan_saat = int((86400 - (now - last_claim)) / 3600)
-        bot.reply_to(message, f"⏳ Daha zaman dolmadı kral. **{kalan_saat} saat** sonra tekrar gel.")
+        kalansaat = int((86400 - (now - last_claim)) / 3600)
+        bot.reply_to(message, f"⏳ Daha zamanın dolmadı. {kalansaat} saat sonra gel.")
 
-# --- OYUN MEKANİKLERİ ---
+# --- OYUNLAR (Limit: 10 Basamak Herkes İçin) ---
 
 @bot.message_handler(commands=['zar'])
 def play_dice(message):
     try:
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "⚠️ Kullanım: `/zar [miktar]`")
-            return
-
+        if len(args) < 2: return bot.reply_to(message, "Kullanım: /zar [miktar]")
+        if len(args[1]) > 10: return bot.reply_to(message, "🛑 O kadar büyük oynayamazsın (Max 10 hane).")
+        
         bet = int(args[1])
         user_id = message.from_user.id
-        current_bal = get_balance(user_id)
-
-        if bet <= 0:
-            bot.reply_to(message, "Pozitif bir sayı girmelisin.")
-            return
-        if bet > current_bal:
-            bot.reply_to(message, "💸 Paran yetmiyor! Bakiye yetersiz.")
-            return
-
-        # Oyun
-        user_roll = random.randint(1, 6)
-        bot_roll = random.randint(1, 6)
+        if bet <= 0: return bot.reply_to(message, "Pozitif sayı gir.")
+        if bet > get_balance(user_id): return bot.reply_to(message, "Paran yok.")
         
-        msg = f"🎲 **ZAR DÜELLOSU** 🎲\n\n👤 Senin Zarın: **{user_roll}**\n🤖 Lucius'un Zarı: **{bot_roll}**\n"
-
-        if user_roll > bot_roll:
+        u_roll, b_roll = random.randint(1,6), random.randint(1,6)
+        msg = f"🎲 Sen: {u_roll} | Bot: {b_roll}"
+        
+        if u_roll > b_roll:
             update_balance(user_id, bet)
-            msg += f"\n✅ **KAZANDIN!** +{bet} para hesabına eklendi."
-        elif bot_roll > user_roll:
+            msg += f"\n✅ Kazandın: +{bet}"
+        elif b_roll > u_roll:
             update_balance(user_id, -bet)
-            msg += f"\n❌ **KAYBETTİN!** -{bet} para gitti."
+            msg += f"\n❌ Kaybettin: -{bet}"
         else:
-            msg += f"\n🤝 **BERABERE!** Ortada kaldık, para iade."
-
+            msg += "\n🤝 Berabere."
         bot.reply_to(message, msg)
-
-    except ValueError:
-        bot.reply_to(message, "Lütfen geçerli bir sayı gir.")
+    except: pass
 
 @bot.message_handler(commands=['slot'])
 def play_slot(message):
     try:
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "⚠️ Kullanım: `/slot [miktar]`")
-            return
-
+        if len(args) < 2: return bot.reply_to(message, "Kullanım: /slot [miktar]")
+        if len(args[1]) > 10: return bot.reply_to(message, "🛑 Çok büyük sayı.")
+        
         bet = int(args[1])
         user_id = message.from_user.id
-        current_bal = get_balance(user_id)
-
-        if bet <= 0 or bet > current_bal:
-            bot.reply_to(message, "Geçersiz miktar veya yetersiz bakiye.")
-            return
-
-        symbols = ["🍒", "🍋", "🍇", "💎", "7️⃣", "🔔"]
-        result = [random.choice(symbols) for _ in range(3)]
+        if bet <= 0: return bot.reply_to(message, "Pozitif sayı gir.")
+        if bet > get_balance(user_id): return bot.reply_to(message, "Paran yok.")
         
-        # Animasyon Mesajı
-        sent_msg = bot.send_message(message.chat.id, "🎰 **Slotlar Dönüyor...** 🎰")
-        time.sleep(1.5) # Heyecan efekti
+        res = [random.choice(["🍒", "🍋", "🍇", "💎", "7️⃣"]) for _ in range(3)]
+        bot.send_message(message.chat.id, f"🎰 | {' | '.join(res)} | 🎰")
         
-        final_text = f"🎰 | {result[0]} | {result[1]} | {result[2]} | 🎰"
-        
-        # Kazanma Mantığı
-        win_amount = 0
-        status = ""
-        
-        if result[0] == result[1] == result[2]:
-            win_amount = bet * 10
-            status = f"\n🚨 **JACKPOT!** 🚨 Paranı 10'a katladın! (+{win_amount})"
-            update_balance(user_id, win_amount) # Bahis zaten cepte, üzerine ekle
-        elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
-            win_amount = bet * 2
-            status = f"\n🎉 **İkili Tutturdun!** Paranı 2'ye katladın! (+{win_amount})"
-            update_balance(user_id, win_amount)
-        else:
-            status = f"\n📉 **Kaybettin.** -{bet} para."
+        if res[0] == res[1] == res[2]: 
+            win = bet * 10
+            update_balance(user_id, win)
+            bot.reply_to(message, f"🚨 JACKPOT! +{win}")
+        elif res[0]==res[1] or res[1]==res[2] or res[0]==res[2]: 
+            win = bet * 2
+            update_balance(user_id, win)
+            bot.reply_to(message, f"🎉 İkili! +{win}")
+        else: 
             update_balance(user_id, -bet)
-            
-        bot.edit_message_text(chat_id=message.chat.id, message_id=sent_msg.message_id, text=final_text + status)
-
-    except ValueError:
-        bot.reply_to(message, "Sayı gir sayı.")
+            bot.reply_to(message, f"📉 Kayıp -{bet}")
+    except: pass
 
 @bot.message_handler(commands=['rusruleti'])
-def play_russian_roulette(message):
+def play_rr(message):
     try:
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "⚠️ Kullanım: `/rusruleti [miktar]`")
-            return
-
+        if len(args) < 2: return bot.reply_to(message, "Kullanım: /rusruleti [miktar]")
+        if len(args[1]) > 10: return bot.reply_to(message, "🛑 Çok büyük sayı.")
+        
         bet = int(args[1])
         user_id = message.from_user.id
-        current_bal = get_balance(user_id)
-
-        if bet > current_bal:
-            bot.reply_to(message, "Cesaretin var ama paran yok.")
-            return
-
-        bot.send_message(message.chat.id, "🔫 Silahı doldurdum... Topu çevirdim... Tetiği çekiyorum...")
-        time.sleep(2)
-
-        bullet = random.randint(1, 6)
+        if bet <= 0: return bot.reply_to(message, "Pozitif sayı gir.")
+        if bet > get_balance(user_id): return bot.reply_to(message, "Paran yok.")
         
-        if bullet == 1:
-            # BAM - Ölüm
-            # Kullanıcı bahsi kaybeder, üstüne bakiyesinin yarısı silinir (Ceza)
-            loss = bet
-            update_balance(user_id, -loss)
-            bot.reply_to(message, "💥 **BAM!** Kafana sıktın.\nMasadaki parayı kaybettin.")
+        if random.randint(1,6) == 1:
+            update_balance(user_id, -bet)
+            bot.reply_to(message, "💥 BAM! Öldün ve paran gitti.")
         else:
-            # Yaşam - Ödül
             win = int(bet * 1.5)
             update_balance(user_id, win)
-            bot.reply_to(message, f"💨 **Tık...** Şanslısın, silah patlamadı.\nCesaret ödülü: **+{win} para** kazandın.")
-
-    except ValueError:
-        bot.reply_to(message, "Hata yaptın.")
+            bot.reply_to(message, f"💨 Şanslısın. +{win}")
+    except: pass
 
 @bot.message_handler(commands=['transfer'])
-def transfer_money(message):
+def transfer(message):
     try:
-        if not message.reply_to_message:
-            bot.reply_to(message, "Kime para göndereceksin? Mesajını yanıtla.")
-            return
-
+        if not message.reply_to_message: return bot.reply_to(message, "Birini yanıtla.")
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "⚠️ Kullanım: `/transfer [miktar]`")
-            return
-            
-        amount = int(args[1])
-        sender_id = message.from_user.id
-        receiver_id = message.reply_to_message.from_user.id
+        if len(args) < 2: return
+        if len(args[1]) > 10: return bot.reply_to(message, "🛑 Transfer limiti aşıldı.")
         
-        if sender_id == receiver_id:
-            bot.reply_to(message, "Kendine para gönderemezsin manyak.")
-            return
-            
-        sender_bal = get_balance(sender_id)
+        amt = int(args[1])
+        sid, rid = message.from_user.id, message.reply_to_message.from_user.id
+        if amt <= 0: return bot.reply_to(message, "Pozitif sayı gir.")
+        if amt > get_balance(sid): return bot.reply_to(message, "Paran yok.")
         
-        if amount <= 0:
-            bot.reply_to(message, "Pozitif bir sayı gir.")
-            return
-        if amount > sender_bal:
-            bot.reply_to(message, "Olmayan parayı gönderemezsin.")
-            return
-            
-        # İşlem
-        update_balance(sender_id, -amount)
-        update_balance(receiver_id, amount)
-        
-        bot.reply_to(message, f"💸 **Transfer Başarılı!**\n\nGönderen: Sen\nAlıcı: {message.reply_to_message.from_user.first_name}\nMiktar: {amount}")
+        update_balance(sid, -amt)
+        update_balance(rid, amt)
+        bot.reply_to(message, f"💸 Transfer: {amt} gönderildi.")
+    except: pass
 
-    except ValueError:
-        bot.reply_to(message, "Miktarı düzgün yaz.")
-
-# --- ADMIN KOMUTLARI (MANUEL LISTE KONTROLLU) ---
+# --- 🔥 ADMİN KOMUTLARI (ÖZEL HİYERARŞİ) 🔥 ---
 
 @bot.message_handler(commands=['ceza'])
 def admin_ceza(message):
-    # ID Listesi Kontrolü
-    if message.from_user.id not in ADMIN_LIST:
+    user_id = message.from_user.id
+    
+    # 1. Yetki Kontrolü
+    if user_id not in ADMIN_LIST:
         bot.reply_to(message, "bu komutu kullanma etgin yok yarram")
         return
 
     if not message.reply_to_message:
-        bot.reply_to(message, "Kime ceza keseceksin? Mesajını yanıtla.")
+        bot.reply_to(message, "Kime ceza? Mesajı yanıtla.")
         return
 
     try:
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "Miktar gir: `/ceza [miktar]`")
+        if len(args) < 2: return
+        miktar_str = args[1]
+        
+        # 2. PATRON KONTROLÜ (Sen değilsen limit var)
+        if user_id != SAHIP_ID and len(miktar_str) > 10:
+            bot.reply_to(message, "🛑 **Admin Sınırı:** En fazla 10 basamak ceza kesebilirsin.\nDaha fazlası için Lucius'a söyle.")
             return
-            
-        amount = int(args[1])
+
+        amount = int(miktar_str)
         target_id = message.reply_to_message.from_user.id
-        target_name = message.reply_to_message.from_user.first_name
-        
-        current_bal = get_balance(target_id)
-        # Eksiye düşmeme garantisi (max(0, ...))
-        new_bal = max(0, current_bal - amount)
-        
+        current = get_balance(target_id)
+        # Eksiye düşmeme garantisi
+        new_bal = max(0, current - amount)
         set_balance(target_id, new_bal)
         
-        bot.send_message(message.chat.id, f"🚨 **CEZA KESİLDİ!**\n\n👤 **Kişi:** {target_name}\n🔻 **Kesilen:** {amount}\n💰 **Kalan Bakiye:** {new_bal}")
-        
-    except ValueError:
-        bot.reply_to(message, "Sayı gir.")
+        bot.send_message(message.chat.id, f"🚨 **CEZA KESİLDİ!**\n👮 İşlem Yapan: {message.from_user.first_name}\n🔻 Kesilen: {amount}\n💰 Kalan: {new_bal}")
+    except: pass
 
-@bot.message_handler(commands=['paraver'])
+@bot.message_handler(commands=['paraver', 'banka'])
 def admin_give(message):
-    # ID Listesi Kontrolü
-    if message.from_user.id not in ADMIN_LIST:
+    user_id = message.from_user.id
+    
+    # 1. Yetki Kontrolü
+    if user_id not in ADMIN_LIST:
         bot.reply_to(message, "bu komutu kullanma etgin yok yarram")
         return
 
     if not message.reply_to_message:
-        bot.reply_to(message, "Kime para vereceksin? Mesajını yanıtla.")
+        bot.reply_to(message, "Kime para? Mesajı yanıtla.")
         return
 
     try:
         args = message.text.split()
-        if len(args) < 2:
-            bot.reply_to(message, "Miktar gir: `/paraver [miktar]`")
-            return
-            
-        amount = int(args[1])
-        target_id = message.reply_to_message.from_user.id
-        target_name = message.reply_to_message.from_user.first_name
+        if len(args) < 2: return
+        miktar_str = args[1]
         
+        # 2. PATRON KONTROLÜ (Sen değilsen limit var)
+        if user_id != SAHIP_ID and len(miktar_str) > 10:
+            bot.reply_to(message, "🛑 **Admin Sınırı:** Kafana göre o kadar para basamazsın.\nLimit: 10 basamak.")
+            return
+
+        amount = int(miktar_str)
+        target_id = message.reply_to_message.from_user.id
         update_balance(target_id, amount)
         
-        bot.send_message(message.chat.id, f"💵 **PARA YATIRILDI**\n\n👤 **Kişi:** {target_name}\n➕ **Yatırılan:** {amount}\n💰 **Yeni Bakiye:** {get_balance(target_id)}")
-        
-    except ValueError:
-        bot.reply_to(message, "Sayı gir.")
+        bot.send_message(message.chat.id, f"💵 **PARA YATIRILDI**\n👮 İşlem Yapan: {message.from_user.first_name}\n➕ Yatırılan: {amount}")
+    except: pass
 
 # --- BAŞLAT ---
 bot.polling()
-
-
