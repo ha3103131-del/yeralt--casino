@@ -10,7 +10,7 @@ from flask import Flask
 from threading import Thread
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 💎 UNDERGROUND FEDERATION: RENDER EDITION (V4) 💎
+# 💎 UNDERGROUND FEDERATION: RENDER EDITION (V5 - FIXED) 💎
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #
 # 🛠 KURULUM (RENDER.COM İÇİN):
@@ -28,7 +28,7 @@ from threading import Thread
 # ⚙️ AYARLAR
 API_TOKEN = '8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M' # @BotFather'dan alınan token
 SAHIP_ID = 7795343194             # Sizin (PATRON) Telegram ID'niz
-ADMIN_LIST = [6126663392] # Diğer Yöneticilerin ID'leri (Virgülle ayırın)
+ADMIN_LIST = [6126663392] # Diğer Yöneticilerin ID'leri
 DB_FILE = "database.json"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode='HTML')
@@ -111,10 +111,8 @@ def animate_slot(chat_id, message_id, result_emojis, final_text):
     ]
     for frame in frames:
         try:
-            bot.edit_message_text(f"<b>🎰 SLOT DÖNÜYOR...</b>
-━━━━━━━━━━━━
-{frame}
-━━━━━━━━━━━━", chat_id, message_id)
+            # Not: \n kullanıldı çünkü python f-string tek satırda olmalı
+            bot.edit_message_text(f"<b>🎰 SLOT DÖNÜYOR...</b>\n━━━━━━━━━━━━\n{frame}\n━━━━━━━━━━━━", chat_id, message_id)
             time.sleep(0.5)
         except: pass
     try:
@@ -144,8 +142,9 @@ def create_mines_keyboard(grid, revealed, game_over=False):
 
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
+    # Üç tırnaklı stringlerde enter kullanılabilir
     text = """
-🔥 <b>UNDERGROUND CASINO</b> 🔥
+🔥 <b>𝐂 𝐀 𝐒 𝐈̇ 𝐍 𝐎 -- 𝐀𝐋𝐅𝐀</b> 🔥
 ━━━━━━━━━━━━━━━━
 <b>Finans:</b>
 💰 <code>/bakiye</code> - Cüzdan
@@ -169,21 +168,14 @@ def admin_panel(message):
     role = check_auth(message.from_user.id)
     
     if role == "USER":
-        # İstenilen özel cevap
         bot.reply_to(message, "bu komutu kullanma yetkin yok yarram... bot sahibine 200tl ateşle sen de yetkilen ; )")
     else:
-        # Yetkili cevabı
-        bot.reply_to(message, f"🕵️‍♂️ <b>YÖNETİM PANELİ</b>
-Hoşgeldin, yetkin: <b>{role}</b>
-
-Komutlar:
-/ekle [ID] [Miktar] - Para Ekle
-/sil [ID] [Miktar] - Para Sil")
+        bot.reply_to(message, f"🕵️‍♂️ <b>YÖNETİM PANELİ</b>\nHoşgeldin, yetkin: <b>{role}</b>\n\nKomutlar:\n/ekle [ID] [Miktar] - Para Ekle\n/sil [ID] [Miktar] - Para Sil")
 
 @bot.message_handler(commands=['ekle'])
 def add_money_admin(message):
     role = check_auth(message.from_user.id)
-    if role == "USER": return # Cevap vermeye gerek yok veya üstteki aynı cevabı verebilirsiniz
+    if role == "USER": return 
     
     try:
         args = message.text.split()
@@ -203,9 +195,7 @@ def add_money_admin(message):
 @bot.message_handler(commands=['bakiye'])
 def balance_cmd(message):
     db, user = get_user(message.from_user.id, message.from_user.first_name)
-    bot.reply_to(message, f"💳 <b>{user['username']}</b>
-💰 {format_money(user['balance'])} TL
-🏆 Lvl: {user['level']}")
+    bot.reply_to(message, f"💳 <b>{user['username']}</b>\n💰 {format_money(user['balance'])} TL\n🏆 Lvl: {user['level']}")
 
 @bot.message_handler(commands=['bonus'])
 def bonus_cmd(message):
@@ -221,7 +211,7 @@ def bonus_cmd(message):
     save_db(db)
     bot.reply_to(message, "🎁 25.000 TL eklendi!")
 
-# --- OYUN HANDLERLARI (Önceki kod ile aynı mantık, kısaltıldı) ---
+# --- OYUN HANDLERLARI ---
 
 @bot.message_handler(commands=['slot'])
 def slot_cmd(message):
@@ -235,7 +225,6 @@ def slot_cmd(message):
             bot.reply_to(message, "⚠️ Bakiye yetersiz.")
             return
             
-        # Limit kontrolü (Normal kullanıcılar için)
         if check_auth(uid) == "USER" and len(str(amount)) > 10:
             bot.reply_to(message, "⚠️ Limit aşıldı.")
             return
@@ -247,17 +236,12 @@ def slot_cmd(message):
         emojis = ['🍒', '🍋', '🍇', '💎', '7️⃣']
         res = [random.choice(emojis) for _ in range(3)]
         
-        # Basit kazanma mantığı
         won = (res[0] == res[1] == res[2]) or (random.random() < 0.3)
         mult = 5 if (res[0] == res[1] == res[2]) else 2
         
         msg = bot.reply_to(message, "🎰 <b>BAŞLATILIYOR...</b>")
         
-        final_text = f"🎰 <b>SLOT SONUCU</b>
-━━━━━━━━━━━━
-| {' | '.join(res)} |
-━━━━━━━━━━━━
-"
+        final_text = f"🎰 <b>SLOT SONUCU</b>\n━━━━━━━━━━━━\n| {' | '.join(res)} |\n━━━━━━━━━━━━\n"
         if won:
             win = amount * mult
             user['balance'] += win
@@ -287,8 +271,7 @@ def mines_cmd(message):
         for i in random.sample(range(25), 3): grid[i] = 1
         
         active_games[uid] = { "type": "mines", "bet": amount, "grid": grid, "revealed": [], "multiplier": 1.0 }
-        bot.reply_to(message, f"💣 <b>MAYIN: 3</b>
-Bahis: {format_money(amount)} TL", reply_markup=create_mines_keyboard(grid, []))
+        bot.reply_to(message, f"💣 <b>MAYIN: 3</b>\nBahis: {format_money(amount)} TL", reply_markup=create_mines_keyboard(grid, []))
     except: pass
 
 @bot.message_handler(commands=['bj'])
@@ -311,9 +294,7 @@ def bj_cmd(message):
         g = active_games[uid]
         kb = InlineKeyboardMarkup()
         kb.add(InlineKeyboardButton("🟢 Kart Çek", callback_data="bj_hit"), InlineKeyboardButton("🛑 Dur", callback_data="bj_stand"))
-        bot.reply_to(message, f"🃏 <b>BLACKJACK</b>
-Krupiye: {g['dealer'][0]} + ?
-Sen: {sum(g['player'])}", reply_markup=kb)
+        bot.reply_to(message, f"🃏 <b>BLACKJACK</b>\nKrupiye: {g['dealer'][0]} + ?\nSen: {sum(g['player'])}", reply_markup=kb)
     except: pass
 
 # 📞 CALLBACK HANDLER
@@ -333,9 +314,7 @@ def callback_handler(call):
             else:
                 kb = InlineKeyboardMarkup()
                 kb.add(InlineKeyboardButton("🟢 Kart Çek", callback_data="bj_hit"), InlineKeyboardButton("🛑 Dur", callback_data="bj_stand"))
-                bot.edit_message_text(f"🃏 <b>BJ</b>
-Krupiye: {game['dealer'][0]} + ?
-Sen: {sum(game['player'])}", call.message.chat.id, call.message.message_id, reply_markup=kb)
+                bot.edit_message_text(f"🃏 <b>BJ</b>\nKrupiye: {game['dealer'][0]} + ?\nSen: {sum(game['player'])}", call.message.chat.id, call.message.message_id, reply_markup=kb)
         elif call.data == "bj_stand":
             d = sum(game['dealer'])
             while d < 17: 
@@ -349,9 +328,7 @@ Sen: {sum(game['player'])}", call.message.chat.id, call.message.message_id, repl
             if win > 0:
                 db[str(uid)]['balance'] += win
                 save_db(db)
-            bot.edit_message_text(f"🏁 <b>BİTTİ</b>
-Sen: {p} | Krupiye: {d}
-{'✅ KAZANDIN' if win > game['bet'] else '❌ KAYBETTİN'}", call.message.chat.id, call.message.message_id)
+            bot.edit_message_text(f"🏁 <b>BİTTİ</b>\nSen: {p} | Krupiye: {d}\n{'✅ KAZANDIN' if win > game['bet'] else '❌ KAYBETTİN'}", call.message.chat.id, call.message.message_id)
             del active_games[uid]
             
     elif game['type'] == 'mines':
@@ -374,4 +351,3 @@ Sen: {p} | Krupiye: {d}
 keep_alive()
 print("✅ BOT AKTİF")
 bot.infinity_polling()
-
