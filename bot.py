@@ -166,8 +166,7 @@ def daily_bonus(message):
     if now - last < 86400:
         rem = 86400 - (now - last)
         h, m = int(rem // 3600), int((rem % 3600) // 60)
-        bot.reply_to(message, f"⏳ <b>Sakin ol şampiyon.</b>")
-Bonus için: {h} saat {m} dakika beklemelisin.", parse_mode='HTML')
+      bot.reply_to(message, f"⌛ <b>Sakin ol şampiyon.</b>\nBonus için: {h} saat {m} dakika beklemelisin.", parse_mode='HTML')
         return
 
     user['balance'] += 25000
@@ -490,5 +489,6 @@ Mayına bastın. {format_money(game['bet'])} TL gitti.",
 
 print("🎰 Yeraltı Kumarhanesi Açıldı...")
 bot.polling()
+
 
 
