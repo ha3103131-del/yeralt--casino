@@ -6,7 +6,7 @@ import time
 
 # --- AYARLAR ---
 API_TOKEN = '8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M'
-'
+
 bot = telebot.TeleBot(API_TOKEN)
 
 # --- 👑 PATRON AYARLARI ---
@@ -265,4 +265,5 @@ def admin_give(message):
 
 # --- BAŞLAT ---
 bot.polling()
+
 
