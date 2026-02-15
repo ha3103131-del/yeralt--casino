@@ -5,7 +5,7 @@ import os
 import time
 
 # --- AYARLAR ---
-TOKEN = "8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M"
+API_TOKEN = '8574466093:AAF6MnSQGePYvi1PefAyBk7F8z34Ptjrv6M'
 bot = telebot.TeleBot(API_TOKEN)
 
 # YÖNETİCİ ID LİSTESİ (Buraya kendi ID'ni ve diğer adminlerin ID'sini virgülle ekle)
